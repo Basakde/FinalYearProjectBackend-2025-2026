@@ -1,9 +1,20 @@
-from fastapi import FastAPI, HTTPException, Request
+import base64
+import os
+import uuid
+from typing import Optional
+from fastapi import FastAPI, HTTPException, Request, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from supabase import create_client
 from models import ClothingItemCreate, UserCreate
 from db import connect_to_db, close_db, DATABASE_URL
+from io import BytesIO
+from rembg import remove, new_session
+from PIL import Image
 
 app = FastAPI()
+SUPABASE_URL=os.getenv("SUPABASE_URL")
+SUPABASE_SERVICE_KEY=os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+supabase=create_client(SUPABASE_URL,SUPABASE_SERVICE_KEY)
 
 
 app.add_middleware(
@@ -14,6 +25,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+session = new_session("u2netp")
 @app.on_event("startup")
 async def startup():
     app.state.db = await connect_to_db()
@@ -69,3 +81,41 @@ async def create_user(user: UserCreate, request: Request):
             return {"message": "User created", "user": dict(row) if row else None}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/items/{user_id}")
+async def get_items_by_user(request: Request, user_id: str):
+    print("🟢 Fetching items for user:", user_id)
+    pool = request.app.state.db
+    try:
+        async with pool.acquire() as connection:
+            if user_id:
+                query = "SELECT * FROM clothingItems WHERE user_id = $1;"
+                rows = await connection.fetch(query, user_id)
+            return {
+                "message": "Items fetched successfully",
+                "items": [dict(row) for row in rows],
+            }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
+@app.post("/remove-bg")
+async def remove_bg(file: UploadFile = File(...)):
+    try:
+        image_data = await file.read()
+        input_image = Image.open(BytesIO(image_data))
+        # ✅ Use preloaded session
+        output_image = remove(input_image, session=session)
+
+        buffer = BytesIO()
+        output_image.save(buffer, format="PNG")
+
+        processed_base64_str = base64.b64encode(buffer.getvalue()).decode("utf-8")
+        return {"processed_base64": processed_base64_str}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+

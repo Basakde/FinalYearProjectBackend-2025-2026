@@ -9,6 +9,7 @@ class ClothingItemCreate(BaseModel):
     category: Optional[str] = None
     subcategory: Optional[str] = None
 
+
 class UserCreate(BaseModel):
     id: str
     email: str

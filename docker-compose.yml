@@ -1,0 +1,13 @@
+version: "3.9"
+
+services:
+  backend:
+    build: .
+    container_name: fyp-backend
+    ports:
+      - "8000:8000"
+    environment:
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      DATABASE_URL: ${DATABASE_URL}
+    restart: always

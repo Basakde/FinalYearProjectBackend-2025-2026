@@ -5,7 +5,6 @@ from dotenv import load_dotenv
 load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL")
 
-import ssl
 import asyncpg
 
 async def connect_to_db():

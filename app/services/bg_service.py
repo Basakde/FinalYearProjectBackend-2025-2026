@@ -8,6 +8,9 @@ from PIL import Image
 
 async def remove_bg_service(file: UploadFile, session):
     try:
+        print(file.content_type)
+        print(file.filename)
+
         # Read uploaded file bytes
         image_data = await file.read()
 

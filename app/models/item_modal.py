@@ -8,7 +8,7 @@ class ClothingItemCreate(BaseModel):
     image_url: Optional[str] = None
     processed_img_url: Optional[str] = None
     category_id: Optional[int] = None
-    subcategory: Optional[str] = ""
+    subcategory_id: Optional[int] = None
 
     colors: List[str] = []
     materials: List[str] = []
@@ -19,7 +19,7 @@ class ClothingItemCreate(BaseModel):
 class ItemUpdate(BaseModel):
     img_description: Optional[str] = None
     category_id: Optional[int] = None
-    subcategory: Optional[str] = None
+    subcategory_id: Optional[int] = None
     image_url: Optional[str] = None
     processed_img_url: Optional[str] = None
 

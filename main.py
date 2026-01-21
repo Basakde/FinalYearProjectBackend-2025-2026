@@ -9,6 +9,7 @@ from app.api.item_api import router as item_router
 from app.api.bg_api import router as bg_router
 from app.api.category_api import router as category_router
 from app.api.weather_api import router as weather_router
+from app.api.subcategory_api import router as subcategory_router
 
 
 app = FastAPI()
@@ -38,6 +39,7 @@ app.include_router(item_router)
 app.include_router(bg_router)
 app.include_router(category_router)
 app.include_router(weather_router)
+app.include_router(subcategory_router)
 
 @app.on_event("shutdown")
 async def shutdown():

@@ -16,10 +16,12 @@ async def get_item_by_id_service(pool, item_id: str):
                 item_id
             )
 
+
             if not row:
                 raise HTTPException(status_code=404, detail="Item not found")
 
             item = dict(row)
+            print("Incoming subcategory:", item)
 
             # Fetch tags
             colors = await connection.fetch("""
@@ -86,7 +88,7 @@ async def create_item_service(pool, item: ClothingItemCreate):
                 """
                 INSERT INTO clothingItems (
                     user_id, img_description, image_url, processed_img_url,
-                    category_id, subcategory
+                    category_id, subcategory_id
                 )
                 VALUES ($1,$2,$3,$4,$5,$6)
                 RETURNING id;
@@ -96,7 +98,7 @@ async def create_item_service(pool, item: ClothingItemCreate):
                 item.image_url,
                 item.processed_img_url,
                 item.category_id,
-                item.subcategory,
+                item.subcategory_id,
             )
 
             item_id = item_row["id"]
@@ -120,13 +122,13 @@ async def create_item_service(pool, item: ClothingItemCreate):
                 item_id, item.user_id, item.occasion
             )
             for season in item.season:
+                season = season.strip().lower()
+
                 season_row = await con.fetchrow(
-                    "SELECT id FROM Seasons WHERE name = $1;",
+                    "SELECT id FROM Seasons WHERE LOWER(name) = $1;",
                     season
                 )
-
                 if not season_row:
-                    # If user sends an invalid season name
                     continue
 
                 season_id = season_row["id"]
@@ -166,8 +168,6 @@ async def delete_item_service(pool, item_id: str):
 
 
 
-
-
 # UPDATE ITEM
 
 async def update_item_service(pool, item_id: str, data: dict):
@@ -175,6 +175,7 @@ async def update_item_service(pool, item_id: str, data: dict):
     Updates item fields AND all tag relations.
     """
     user_id = data.get("user_id")
+    print("Incoming subcategory:", data.get("subcategory_id"))
     if not user_id:
         raise HTTPException(400, "Missing user_id in request")
 
@@ -184,24 +185,26 @@ async def update_item_service(pool, item_id: str, data: dict):
 
             # 1. UPDATE MAIN FIELDS (description, category,subcategory)
 
-            updatable_fields = ["img_description", "category_id", "subcategory"]
-
-            # Take only fields that belong in item table
-            fields_to_update = {
-                k: v for k, v in data.items() if k in updatable_fields
-            }
-
-            if fields_to_update:
-                # dynamic SET clause (e.g. "img_description = $1, category_id = $2")
-                set_clause = ", ".join(
-                    [f"{k} = ${i+1}" for i, k in enumerate(fields_to_update)]
-                )
-
+            if "img_description" in data:
                 await conn.execute(
-                    f"UPDATE ClothingItems SET {set_clause} WHERE id = '{item_id}'",
-                    *fields_to_update.values()
+                    "UPDATE ClothingItems SET img_description = $1 WHERE id = $2",
+                    data["img_description"],
+                    item_id
                 )
 
+            if "category_id" in data:
+                await conn.execute(
+                    "UPDATE ClothingItems SET category_id = $1 WHERE id = $2",
+                    data["category_id"],
+                    item_id
+                )
+
+            if "subcategory_id" in data:
+                await conn.execute(
+                    "UPDATE ClothingItems SET subcategory_id = $1 WHERE id = $2",
+                    data["subcategory_id"],
+                    item_id
+                )
 
             # 2. HANDLE ALL TAG TYPES
 
@@ -220,11 +223,40 @@ async def update_item_service(pool, item_id: str, data: dict):
                 )
 
             # Seasons
-            if "season" in data:
-                await upsert_tags(
-                    conn, "Seasons", "ItemSeasons", "season_id",
-                    item_id, user_id, data["season"]
-                )
+            print("Incoming seasons:", data.get("season"))
+            if "season" in data and data["season"] is not None:
+                await conn.execute("DELETE FROM ItemSeasons WHERE item_id = $1", item_id)
+
+                SEASON_MAP = {
+                    "spring": "Spring",
+                    "summer": "Summer",
+                    "autumn": "Autumn",
+                    "fall": "Autumn",
+                    "winter": "Winter",
+                }
+
+                for season in data["season"]:
+                    key = (season or "").strip().lower()
+                    canonical = SEASON_MAP.get(key)
+                    if not canonical:
+                        continue
+
+                    season_row = await conn.fetchrow(
+                        "SELECT id FROM Seasons WHERE name = $1;",
+                        canonical
+                    )
+                    if not season_row:
+                        continue
+
+                    await conn.execute(
+                        """
+                        INSERT INTO ItemSeasons (item_id, season_id)
+                        VALUES ($1, $2)
+                        ON CONFLICT DO NOTHING;
+                        """,
+                        item_id,
+                        season_row["id"]
+                    )
 
             # Occasions
             if "occasion" in data:

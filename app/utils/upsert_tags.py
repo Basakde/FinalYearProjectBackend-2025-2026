@@ -26,7 +26,7 @@ async def upsert_tags(conn, table_name, pivot_table, pivot_field, item_id, user_
         await conn.execute(
             f"""
             INSERT INTO {pivot_table} (item_id, {pivot_field})
-            VALUES ($1::uuid, $2::uuid)
+            VALUES ($1::uuid, $2)
             ON CONFLICT DO NOTHING;
             """,
             item_id, tag_id

@@ -9,11 +9,12 @@ class ClothingItemCreate(BaseModel):
     processed_img_url: Optional[str] = None
     category_id: Optional[int] = None
     subcategory_id: Optional[int] = None
+    in_laundry: bool = False
 
     colors: List[str] = []
     materials: List[str] = []
-    occasion: List[str] = []
-    season: List[str] = []
+    occasions: List[str] = []
+    seasons: List[str] = []
 
 
 class ItemUpdate(BaseModel):
@@ -22,6 +23,7 @@ class ItemUpdate(BaseModel):
     subcategory_id: Optional[int] = None
     image_url: Optional[str] = None
     processed_img_url: Optional[str] = None
+    in_laundry: Optional[bool] = None
 
     colors: Optional[List[str]] = None
     materials: Optional[List[str]] = None

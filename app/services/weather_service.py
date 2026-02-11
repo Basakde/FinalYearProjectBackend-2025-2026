@@ -23,9 +23,4 @@ async def get_weather_service(lat: float, lon: float):
     if response.status_code != 200:
         raise HTTPException(status_code=400, detail="Weather API error")
 
-    data = response.json()
-
-    return {
-        "temp": int(data["main"]["temp"]),
-        "icon": data["weather"][0]["icon"],
-    }
+    return response.json()

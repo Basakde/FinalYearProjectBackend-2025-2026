@@ -17,10 +17,9 @@ async def get_subcategories_api(
     return await get_subcategories_service(pool, user_id, category_id)
 
 
-@router.post("/")
+@router.post("/create_subcategory")
 async def create_subcategory_api(request: Request, payload: dict):
     pool = request.app.state.db
-
     user_id = payload.get("user_id")
     category_id = payload.get("category_id")
     name = payload.get("name")

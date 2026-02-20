@@ -10,6 +10,7 @@ class ClothingItemCreate(BaseModel):
     category_id: Optional[int] = None
     subcategory_id: Optional[int] = None
     in_laundry: bool = False
+    last_worn_at:Optional[str] = None
 
     colors: List[str] = []
     materials: List[str] = []
@@ -24,6 +25,7 @@ class ItemUpdate(BaseModel):
     image_url: Optional[str] = None
     processed_img_url: Optional[str] = None
     in_laundry: Optional[bool] = None
+    last_worn_at: Optional[str] = None
 
     colors: Optional[List[str]] = None
     materials: Optional[List[str]] = None

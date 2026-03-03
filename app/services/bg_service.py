@@ -1,31 +1,31 @@
 # app/services/bg_service.py
-
 import base64
 from io import BytesIO
-from fastapi import HTTPException, UploadFile
+from fastapi import HTTPException
 from rembg import remove
 from PIL import Image
 
-async def remove_bg_service(file: UploadFile, session):
+async def remove_bg_bytes(image_data: bytes, session):
     try:
-        print(file.content_type)
-        print(file.filename)
+        input_image = Image.open(BytesIO(image_data)).convert("RGBA")
+        out = remove(input_image, session=session)
 
-        # Read uploaded file bytes
-        image_data = await file.read()
+        if isinstance(out, (bytes, bytearray)):
+            output_image = Image.open(BytesIO(out)).convert("RGBA")
+        else:
+            output_image = out.convert("RGBA")
 
-        # Load it
-        input_image = Image.open(BytesIO(image_data))
+        MAX_W = 1000
+        if output_image.width > MAX_W:
+            ratio = MAX_W / output_image.width
+            new_h = int(output_image.height * ratio)
+            output_image = output_image.resize((MAX_W, new_h), Image.LANCZOS)
 
-        # Remove background using preloaded u2net session
-        output_image = remove(input_image, session=session)
+        buf = BytesIO()
+        output_image.save(buf, format="WEBP", quality=75, method=6)
 
-        # Convert result to base64
-        buffer = BytesIO()
-        output_image.save(buffer, format="PNG")
-        processed_b64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
-
-        return processed_b64
+        b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+        return {"b64": b64, "mime": "image/webp"}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

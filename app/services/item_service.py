@@ -1,8 +1,9 @@
 from fastapi import HTTPException
+
+from app.models.category_mapping import CATEGORY_ID_TO_NAME, SEASON_MAP
+from app.models.vector_helpers import build_item_feature_vector
 from app.utils.upsert_tags import upsert_tags
 from app.models.item_modal import ClothingItemCreate
-
-
 
 
 # GET ITEM BY ID
@@ -16,12 +17,10 @@ async def get_item_by_id_service(pool, item_id: str):
                 item_id
             )
 
-
             if not row:
                 raise HTTPException(status_code=404, detail="Item not found")
 
             item = dict(row)
-            print("Incoming subcategory:", item)
 
             # Fetch tags
             colors = await connection.fetch("""
@@ -48,6 +47,7 @@ async def get_item_by_id_service(pool, item_id: str):
                 WHERE io.item_id = $1;
             """, item_id)
 
+
             # Attach arrays
             item["colors"] = [r["name"] for r in colors]
             item["materials"] = [r["name"] for r in materials]
@@ -65,7 +65,7 @@ async def get_items_by_user_service(pool, user_id: str):
     try:
         async with pool.acquire() as connection:
             rows = await connection.fetch(
-                "SELECT * FROM ClothingItems WHERE user_id = $1;",
+                "SELECT * FROM ClothingItems WHERE user_id = $1 ORDER BY created_at DESC",
                 user_id
             )
             return [dict(row) for row in rows]
@@ -88,9 +88,9 @@ async def create_item_service(pool, item: ClothingItemCreate):
                 """
                 INSERT INTO clothingItems (
                     user_id, img_description, image_url, processed_img_url,
-                    category_id, subcategory_id
+                    category_id, subcategory_id, in_laundry
                 )
-                VALUES ($1,$2,$3,$4,$5,$6)
+                VALUES ($1,$2,$3,$4,$5,$6,$7)
                 RETURNING id;
                 """,
                 item.user_id,
@@ -99,10 +99,10 @@ async def create_item_service(pool, item: ClothingItemCreate):
                 item.processed_img_url,
                 item.category_id,
                 item.subcategory_id,
+                item.in_laundry,
             )
 
             item_id = item_row["id"]
-
 
             # TAGS
 
@@ -119,9 +119,9 @@ async def create_item_service(pool, item: ClothingItemCreate):
             # user generated  occasions
             await upsert_tags(
                 con, "Occasions", "ItemOccasions", "occasion_id",
-                item_id, item.user_id, item.occasion
+                item_id, item.user_id, item.occasions
             )
-            for season in item.season:
+            for season in item.seasons:
                 season = season.strip().lower()
 
                 season_row = await con.fetchrow(
@@ -144,11 +144,33 @@ async def create_item_service(pool, item: ClothingItemCreate):
                     season_id
                 )
 
-            return {"message": "Item created", "item_id": item_id}
+            cat_name = CATEGORY_ID_TO_NAME.get(item.category_id)
+
+            # after you have item_id and the tag lists:
+            feature_vector = build_item_feature_vector(
+                category_name=[cat_name] if cat_name else [],
+                color_names=item.colors or [],
+                material_names=item.materials or [],
+                occasion_names=item.occasions or [],
+                season_names=item.seasons or [],
+            )
+
+            await con.execute(
+                """
+                UPDATE clothingItems 
+                SET attr_vector = $1, 
+                    attr_schema_version = 1
+                WHERE id = $2
+                """,
+                feature_vector,
+                item_id
+            )
+            return {"status": "created","id":str(item_id)}
+
+
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
 
 
 # DELETE ITEM
@@ -175,7 +197,6 @@ async def update_item_service(pool, item_id: str, data: dict):
     Updates item fields AND all tag relations.
     """
     user_id = data.get("user_id")
-    print("Incoming subcategory:", data.get("subcategory_id"))
     if not user_id:
         raise HTTPException(400, "Missing user_id in request")
 
@@ -206,36 +227,42 @@ async def update_item_service(pool, item_id: str, data: dict):
                     item_id
                 )
 
+            if "in_laundry" in data:
+                await conn.execute(
+                    "UPDATE ClothingItems SET in_laundry = $1 WHERE id = $2",
+                    data["in_laundry"],
+                    item_id
+                )
+
             # 2. HANDLE ALL TAG TYPES
 
             # Colors
-            if "colors" in data:
+            if "colors" in data and data["colors"] is not None:
+                # delete all existing relations first
+                await conn.execute("DELETE FROM ItemColors WHERE item_id = $1", item_id)
+
+                # then insert new ones (if list not empty)
                 await upsert_tags(
                     conn, "Colors", "ItemColors", "color_id",
                     item_id, user_id, data["colors"]
                 )
 
             # Materials
-            if "materials" in data:
-                await upsert_tags(
-                    conn, "Materials", "ItemMaterials", "material_id",
-                    item_id, user_id, data["materials"]
-                )
+            if "materials" in data and data["materials"] is not None:
+                await conn.execute("DELETE FROM ItemMaterials WHERE item_id = $1", item_id)
+                await upsert_tags(conn, "Materials", "ItemMaterials", "material_id",
+                                  item_id, user_id, data["materials"])
+
+            if "occasions" in data and data["occasions"] is not None:
+                await conn.execute("DELETE FROM ItemOccasions WHERE item_id = $1", item_id)
+                await upsert_tags(conn, "Occasions", "ItemOccasions", "occasion_id",
+                                  item_id, user_id, data["occasions"])
 
             # Seasons
-            print("Incoming seasons:", data.get("season"))
-            if "season" in data and data["season"] is not None:
+            if "seasons" in data and data["seasons"] is not None:
                 await conn.execute("DELETE FROM ItemSeasons WHERE item_id = $1", item_id)
 
-                SEASON_MAP = {
-                    "spring": "Spring",
-                    "summer": "Summer",
-                    "autumn": "Autumn",
-                    "fall": "Autumn",
-                    "winter": "Winter",
-                }
-
-                for season in data["season"]:
+                for season in data["seasons"]:
                     key = (season or "").strip().lower()
                     canonical = SEASON_MAP.get(key)
                     if not canonical:
@@ -258,15 +285,34 @@ async def update_item_service(pool, item_id: str, data: dict):
                         season_row["id"]
                     )
 
-            # Occasions
-            if "occasion" in data:
-                await upsert_tags(
-                    conn, "Occasions", "ItemOccasions", "occasion_id",
-                    item_id, user_id, data["occasion"]
-                )
+            cat_name = CATEGORY_ID_TO_NAME.get(data["category_id"])
+
+            # after you have item_id and the tag lists:
+            feature_vector = build_item_feature_vector(
+                category_name=[cat_name] if cat_name else [],
+                color_names=data["colors"] or [],
+                material_names=data["materials"] or [],
+                occasion_names=data["occasions"] or [],
+                season_names=data["seasons"] or [],
+            )
+
+            await conn.execute(
+                """
+                UPDATE clothingItems 
+                SET attr_vector = $1, 
+                    attr_schema_version = 1
+                WHERE id = $2
+                """,
+                feature_vector,
+                item_id
+            )
+            return {"status": "created", "id": str(item_id)}
 
 
-            return {"status": "updated"}
 
     except Exception as e:
+        # THIS will show the real reason in your FastAPI logs
+        print("CREATE ITEM ERROR:", repr(e))
         raise HTTPException(status_code=500, detail=str(e))
+
+

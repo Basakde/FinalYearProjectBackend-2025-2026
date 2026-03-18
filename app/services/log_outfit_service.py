@@ -1,35 +1,53 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone, date
 from typing import Dict, Optional, List
+from zoneinfo import ZoneInfo
+
 from fastapi import HTTPException
-from datetime import date
 import calendar
-
-
 from app.services.outfit_service import create_outfit_service
 
 
-async def log_outfit_service(pool, user_id: str, item_ids: List[str], outfit_id:str | None , name: Optional[str] = None, worn_at:Optional[str]=None) -> Dict[str, str]:
+
+DUBLIN_TZ = ZoneInfo("Europe/Dublin")
+async def log_outfit_service(
+    pool,
+    user_id: str,
+    item_ids: List[str],
+    outfit_id: str | None,
+    master_occasion_id: Optional[str] = None,
+    name: Optional[str] = None,
+    worn_at: Optional[str] = None
+) -> Dict[str, str]:
     async with pool.acquire() as conn:
         async with conn.transaction():
-            print("LOG item_ids:", item_ids)
 
             if outfit_id:
-                # reuse existing outfit
                 used_outfit_id = outfit_id
             else:
-                # create outfit if none exists
-                used_outfit_id = await create_outfit_service(conn, user_id, item_ids, name)
+                used_outfit_id = await create_outfit_service(
+                    conn, user_id, item_ids, master_occasion_id, name
+                )
 
             if worn_at:
                 try:
-                    used_worn_at = datetime.fromisoformat(worn_at)
+                    # expected from UI: YYYY-MM-DD
+                    selected_date = date.fromisoformat(worn_at)
+
+                    # current Dublin local time
+                    now_local = datetime.now(DUBLIN_TZ)
+
+                    # selected date + current time, timezone-aware
+                    used_worn_at = datetime.combine(
+                        selected_date,
+                        now_local.timetz()
+                    )
                 except Exception:
-                    raise HTTPException(400, "Invalid worn_at format")
+                    raise HTTPException(400, "Invalid worn_at format, expected YYYY-MM-DD")
             else:
-                used_worn_at = datetime.utcnow()
+                used_worn_at = datetime.now(DUBLIN_TZ)
 
             row = await conn.fetchrow(
                 """
@@ -41,22 +59,26 @@ async def log_outfit_service(pool, user_id: str, item_ids: List[str], outfit_id:
                 used_outfit_id,
             )
 
-            await conn.execute(
-                """
-                UPDATE ClothingItems
-                SET last_worn_at = $1
-                WHERE id IN (
-                    SELECT item_id
-                    FROM OutfitItems
-                    WHERE outfit_id = $2
-                );
-                """,
-                used_worn_at,
-                used_outfit_id
-            )
+            now_local = datetime.now(DUBLIN_TZ)
 
-            return dict(row)
+            # Only update last_worn_at for today/past logs, not future plans
+            if used_worn_at <= now_local:
+                await conn.execute(
+                    """
+                    UPDATE ClothingItems ci
+                    SET last_worn_at = $1
+                    WHERE ci.id IN (
+                        SELECT oi.item_id
+                        FROM OutfitItems oi
+                        WHERE oi.outfit_id = $2
+                    )
+                    AND (ci.last_worn_at IS NULL OR ci.last_worn_at < $1);
+                    """,
+                    used_worn_at,
+                    used_outfit_id,
+                )
 
+        return dict(row)
 
 
 async def get_logged_outfits_month_service(pool, user_id: str, month: str):
@@ -147,3 +169,82 @@ async def get_logged_outfits_day_service(pool, user_id: str, date_str: str):
         }
         for r in rows
     ]
+
+
+async def delete_logged_outfit_service(pool, user_id: str, wear_log_id: str) -> Dict[str, str]:
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+
+            # 1) Make sure the wear log exists and belongs to this user
+            log_row = await conn.fetchrow(
+                """
+                SELECT
+                    owl.id,
+                    owl.outfit_id
+                FROM outfit_wear_log owl
+                JOIN Outfits o ON o.id = owl.outfit_id
+                WHERE owl.id = $1::uuid
+                  AND o.user_id = $2::uuid;
+                """,
+                wear_log_id,
+                user_id,
+            )
+
+            if not log_row:
+                raise HTTPException(status_code=404, detail="Wear log not found")
+
+            outfit_id = log_row["outfit_id"]
+
+            # 2) Get all items that belong to the outfit of this wear log
+            item_rows = await conn.fetch(
+                """
+                SELECT item_id
+                FROM OutfitItems
+                WHERE outfit_id = $1;
+                """,
+                outfit_id,
+            )
+            item_ids = [row["item_id"] for row in item_rows]
+
+            # 3) Delete only the wear log row
+            await conn.execute(
+                """
+                DELETE FROM outfit_wear_log
+                WHERE id = $1::uuid;
+                """,
+                wear_log_id,
+            )
+
+            # 4) Recalculate last_worn_at for each affected item
+            #    using remaining wear logs up to "now" only
+            now_utc = datetime.now(DUBLIN_TZ)
+
+            for item_id in item_ids:
+                latest_row = await conn.fetchrow(
+                    """
+                    SELECT MAX(owl.worn_at) AS latest_worn_at
+                    FROM outfit_wear_log owl
+                    JOIN OutfitItems oi ON oi.outfit_id = owl.outfit_id
+                    JOIN Outfits o ON o.id = owl.outfit_id
+                    WHERE oi.item_id = $1
+                      AND o.user_id = $2::uuid
+                      AND owl.worn_at <= $3;
+                    """,
+                    item_id,
+                    user_id,
+                    now_utc,
+                )
+
+                latest_worn_at = latest_row["latest_worn_at"] if latest_row else None
+
+                await conn.execute(
+                    """
+                    UPDATE ClothingItems
+                    SET last_worn_at = $1
+                    WHERE id = $2;
+                    """,
+                    latest_worn_at,
+                    item_id,
+                )
+
+            return {"message": "OOTD log deleted successfully"}

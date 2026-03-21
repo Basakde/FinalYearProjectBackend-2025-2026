@@ -9,8 +9,10 @@ router = APIRouter(prefix="/favorites", tags=["Favorites"])
 class FavoritePayload(BaseModel):
     user_id: str
     outfit_id: Optional[str] = None
-    item_ids: Optional[List[str]] = None
+    item_ids: list[Optional[str]]
+    master_occasion_id: Optional[str] = None
     name: Optional[str] = None
+
 
 @router.post("/")
 async def favorite_outfit(request: Request, payload: FavoritePayload):
@@ -25,7 +27,7 @@ async def favorite_outfit(request: Request, payload: FavoritePayload):
                 if not payload.item_ids or len(payload.item_ids) < 2:
                     raise HTTPException(400, "Need outfit_id or item_ids (min 2)")
                 used_outfit_id = await create_outfit_service(
-                    conn, payload.user_id, payload.item_ids, payload.name, is_favorite=False
+                    conn, payload.user_id, payload.item_ids, payload.master_occasion_id, payload.name, is_favorite=False
                 )
 
             # 2) mark as favorite + apply style vec ONCE

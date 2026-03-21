@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Request, HTTPException
 from app.services.subcategory_service import (
     get_subcategories_service,
-    create_subcategory_service,
+    create_subcategory_service, delete_subcategory_service, get_all_user_subcategories_service,
 )
 
 router = APIRouter(prefix="/subcategories", tags=["Subcategories"])
@@ -16,6 +16,13 @@ async def get_subcategories_api(
     pool = request.app.state.db
     return await get_subcategories_service(pool, user_id, category_id)
 
+@router.get("/all")
+async def get_all_user_subcategories_api(
+    request: Request,
+    user_id: str,
+):
+    pool = request.app.state.db
+    return await get_all_user_subcategories_service(pool, user_id)
 
 @router.post("/create_subcategory")
 async def create_subcategory_api(request: Request, payload: dict):
@@ -28,3 +35,15 @@ async def create_subcategory_api(request: Request, payload: dict):
         raise HTTPException(status_code=400, detail="Missing required fields")
 
     return await create_subcategory_service(pool, user_id, category_id, name)
+@router.delete("/{subcategory_id}")
+async def delete_subcategory_api(
+    request: Request,
+    subcategory_id: int,
+    user_id: str,
+):
+    pool = request.app.state.db
+
+    if not subcategory_id or not user_id:
+        raise HTTPException(status_code=400, detail="Missing required fields")
+
+    return await delete_subcategory_service(pool, user_id, subcategory_id)

@@ -6,22 +6,24 @@ from app.helpers.favorite_items_helper import apply_favorite_to_user_style
 from app.helpers.vector_math import l2_normalize
 
 
-async def create_outfit_service(conn, user_id: str, item_ids: List[str], name: Optional[str] = None, is_favorite:bool = False) -> str:
+async def create_outfit_service(conn, user_id: str,item_ids: list[Optional[str]], master_occasion_id: Optional[str] = None, name: Optional[str] = None, is_favorite:bool = False) -> str:
     if not user_id or not isinstance(item_ids, list) or len(item_ids) < 2:
         raise HTTPException(400, "user_id and item_ids (min 2) required")
             # 1) create outfit
     outfit_row = await conn.fetchrow(
         """
-        INSERT INTO Outfits (user_id, name, is_favorite, favorited_at)
-        VALUES ($1, $2, $3,CASE WHEN $3 THEN NOW() ELSE NULL END )
+        INSERT INTO Outfits (user_id, master_occasion_id, name, is_favorite, favorited_at)
+        VALUES ($1, $2, $3, $4 , CASE WHEN $4 THEN NOW() ELSE NULL END )
         RETURNING id;
         """,
-        user_id, name,is_favorite
+        user_id, master_occasion_id, name,is_favorite
     )
     outfit_id = outfit_row["id"]
 
     # 2) link outfit items
     for pos, item_id in enumerate(item_ids):
+        if not item_id:
+            continue
         await conn.execute(
             """
             INSERT INTO OutfitItems (outfit_id, item_id, position)
@@ -117,12 +119,15 @@ async def compute_and_store_outfit_vec(conn, outfit_id: str) -> list[float]:
     return outfit_vec
 
 
-async def get_favorite_outfits_service(pool,user_id: str):
+async def get_favorite_outfits_service(pool, user_id: str):
     async with pool.acquire() as conn:
-        rows = await conn.fetch("""
-           SELECT
+        rows = await conn.fetch(
+            """
+            SELECT
               o.id::text AS outfit_id,
               o.name AS outfit_name,
+              o.master_occasion_id::text AS master_occasion_id,
+              om.name AS occasion_name,
               COALESCE(
                 json_agg(
                   json_build_object(
@@ -135,17 +140,20 @@ async def get_favorite_outfits_service(pool,user_id: str):
                 '[]'::json
               ) AS items
             FROM Outfits o
+            LEFT JOIN occasions_master om ON om.id = o.master_occasion_id
             LEFT JOIN OutfitItems oi ON oi.outfit_id = o.id
             LEFT JOIN ClothingItems ci ON ci.id = oi.item_id
             WHERE o.user_id = $1
               AND o.is_favorite = TRUE
-            GROUP BY o.id
+            GROUP BY o.id, o.name, o.master_occasion_id, om.name
             ORDER BY o.created_at DESC;
-                    """, user_id)
+            """,
+            user_id,
+        )
         return {"outfits": [dict(r) for r in rows]}
 
 
-async def delete_favorite_outfit_service(pool, user_id, outfit_id):
+async def delete_favorite_outfit_service(pool, outfit_id, user_id):
     try:
         async with pool.acquire() as conn:
             await conn.execute(

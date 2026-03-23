@@ -80,7 +80,7 @@ async def get_outfit_suggestions_service(
         clothes = await get_items_for_suggestions_service(pool, user_id, seasons, occasion_id)
 
         # SECOND :  Build slots
-        slots = await build_slots(clothes)
+        slots = build_slots(clothes)
         print("SLOT COUNTS (filtered):", {k: len(v) for k, v in slots.items()})
 
         # THIRD: This checks whether the filtered wardrobe is too strict and now missing basic pieces.
@@ -91,7 +91,7 @@ async def get_outfit_suggestions_service(
         #Fallback : If occasion filtering caused missing essentials, it retries without occasion filter
         if occasion_id and (need_shoes or need_bottoms or need_tops):
             fallback_clothes = await get_items_for_suggestions_service(pool, user_id, seasons, None)
-            fallback_slots = await build_slots(fallback_clothes)
+            fallback_slots =  build_slots(fallback_clothes)
 
             if need_shoes:
                 slots["shoes"] = fallback_slots.get("shoes", [])

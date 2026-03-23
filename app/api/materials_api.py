@@ -12,7 +12,6 @@ router = APIRouter(prefix="/attributes", tags=["Attributes"])
 class NameBody(BaseModel):
     name: str = Field(min_length=1, max_length=50)
 
-
 @router.get("/materials/options")
 async def get_material_options(request: Request):
     pool = request.app.state.db

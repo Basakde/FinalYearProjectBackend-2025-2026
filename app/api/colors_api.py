@@ -12,7 +12,6 @@ router = APIRouter(prefix="/attributes", tags=["Attributes"])
 class NameBody(BaseModel):
     name: str = Field(min_length=1, max_length=50)
 
-
 @router.get("/colors/options")
 async def get_color_options( request: Request):
     pool = request.app.state.db

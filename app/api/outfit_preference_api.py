@@ -1,8 +1,9 @@
 from typing import Optional, List
 
 from pydantic import BaseModel
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Request, HTTPException, Depends
 
+from app.dependencies.auth import get_current_user
 from app.services.outfit_service import create_outfit_service
 from app.services.set_outfit_preference_service import set_outfit_preference_service
 
@@ -16,7 +17,9 @@ class PreferencePayload(BaseModel):
     master_occasion_id:Optional[str]=None
 
 @router.post("/")
-async def set_preference(payload: PreferencePayload, request: Request):
+async def set_preference(payload: PreferencePayload, request: Request,current_user=Depends(get_current_user)):
+    if str(payload.user_id) != str(current_user.id):
+        raise HTTPException(status_code=403, detail="Token user does not match payload user_id")
     pool = request.app.state.db
 
     async with pool.acquire() as conn:

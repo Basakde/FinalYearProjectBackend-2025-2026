@@ -45,18 +45,22 @@ async def quick_try_on_service(conn, payload) -> dict:
 
     contents = [
         """
-        CRITICAL RULES:
-        - If there is a user image DO NOT change the person on the image.
-        - Keep the clothes as they are.
-        - Add hair if there is none.
-        - If there is clothes already remove them before you overlay the new ones.
-        - Keep the exact same pose.
-        - Only change the clothing.
-        - Replace the avatar outfit with the provided clothing items.
-        - Maintain body shape and proportions.
-        - Put a light grey color background.
+        Edit the FIRST image only.
+
+        Task:
+        - Replace the clothing on the person in the first image with the garments shown in the reference clothing images.
+        - Preserve the exact same person identity, face, hair, skin tone, body shape, pose, camera angle, and framing from the first image.
+        - Do not change the person.
+        - Do not beautify, restyle, regenerate, or alter facial features.
+        - Do not change hairstyle.
+        - Do not change body proportions.
+        - Keep the person in the exact same position.
+        - Use the clothing reference images only to transfer the garments.
+        - Output a photorealistic try-on result.
+        - Plain light gray background for full image size.
+        - No border.
         """,
-        person_img,
+        person_img
     ]
 
     if payload.outerwear_url:
@@ -99,7 +103,7 @@ async def quick_try_on_service(conn, payload) -> dict:
     output_dir = "generated_tryons"
     os.makedirs(output_dir, exist_ok=True)
 
-    filename = f"{payload.user_id}_tryon.png"
+    filename = f"{payload.user_id}_tryon.png"#model needs to be kept in the dir with that name to save it in disk
     output_path = os.path.join(output_dir, filename)
     generated_image.save(output_path)
 

@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Request, Depends
 from pydantic import BaseModel
 
 from app.dependencies.auth import get_current_user
-from app.services.prompt_service import quick_try_on_service
+from app.services.virtual_try_on_service import quick_try_on_service
 
 load_dotenv()
 

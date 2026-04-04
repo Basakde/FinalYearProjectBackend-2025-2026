@@ -1,4 +1,4 @@
-# app/services/vector_manual.py
+# app/services/vector_.py
 
 COLORS = [
     "black","white","grey","blue","red","green","beige","brown","pink","purple",

@@ -25,7 +25,7 @@ async def apply_favorite_to_user_style(conn, user_id: str, outfit_vec: list[floa
             style_vec = [0.0] * len(outfit_vec)
             count = 0
 
-    new_style = ema_update(style_vec, outfit_vec, alpha=FAV_ALPHA, sign=+1)
+    new_style = ema_update(style_vec, outfit_vec, learning_rate=FAV_ALPHA, feedback_direction=+1)
     new_count = count + 1
 
     await conn.execute(

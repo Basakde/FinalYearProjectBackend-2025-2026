@@ -11,7 +11,7 @@ HOT_TEMP_C = 22            # warm/hot
 # If raining (or strong wind), show jacket on even if slightly warmer
 RAIN_JACKET_TEMP_C = 17
 WIND_JACKET_TEMP_C = 18
-STRONG_WIND_MPS = 8   # ~29 km/h
+STRONG_WIND_SPEED = 8   # ~29 km/h
 
 def seasons_from_temp(temp_c: float) -> list[str]:
     if temp_c <= 8:
@@ -30,7 +30,7 @@ def jacket_required(temp_c: float, is_raining: bool, wind_mps: float) -> bool:
         return True
     if is_raining and temp_c <= RAIN_JACKET_TEMP_C:
         return True
-    if wind_mps >= STRONG_WIND_MPS and temp_c <= WIND_JACKET_TEMP_C:
+    if wind_mps >= STRONG_WIND_SPEED and temp_c <= WIND_JACKET_TEMP_C:
         return True
     return False
 

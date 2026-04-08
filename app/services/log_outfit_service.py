@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone, date
+from datetime import datetime, timezone, date, time
 from typing import Dict, Optional, List
 from zoneinfo import ZoneInfo
 
@@ -10,12 +10,17 @@ import calendar
 from app.services.outfit_service import create_outfit_service
 
 
+from datetime import datetime, date
+from zoneinfo import ZoneInfo
+from typing import List, Optional, Dict
+from fastapi import HTTPException
 
 DUBLIN_TZ = ZoneInfo("Europe/Dublin")
+
 async def log_outfit_service(
     pool,
     user_id: str,
-    item_ids: List[str],
+    item_ids: List[Optional[str]],
     outfit_id: str | None,
     master_occasion_id: Optional[str] = None,
     name: Optional[str] = None,
@@ -33,16 +38,12 @@ async def log_outfit_service(
 
             if worn_at:
                 try:
-                    # expected from UI: YYYY-MM-DD
                     selected_date = date.fromisoformat(worn_at)
-
-                    # current Dublin local time
-                    now_local = datetime.now(DUBLIN_TZ)
-
-                    # selected date + current time, timezone-aware
                     used_worn_at = datetime.combine(
                         selected_date,
-                        now_local.timetz()
+                        time(12, 0),
+                        tzinfo=DUBLIN_TZ
+
                     )
                 except Exception:
                     raise HTTPException(400, "Invalid worn_at format, expected YYYY-MM-DD")
@@ -61,20 +62,27 @@ async def log_outfit_service(
 
             now_local = datetime.now(DUBLIN_TZ)
 
-            # Only update last_worn_at for today/past logs, not future plans
             if used_worn_at <= now_local:
                 await conn.execute(
                     """
                     UPDATE ClothingItems ci
-                    SET last_worn_at = $1
-                    WHERE ci.id IN (
-                        SELECT oi.item_id
+                    SET last_worn_at = sub.max_worn_at
+                    FROM (
+                        SELECT
+                            oi.item_id,
+                            MAX(owl.worn_at) AS max_worn_at
                         FROM OutfitItems oi
-                        WHERE oi.outfit_id = $2
-                    )
-                    AND (ci.last_worn_at IS NULL OR ci.last_worn_at < $1);
+                        JOIN outfit_wear_log owl
+                            ON owl.outfit_id = oi.outfit_id
+                        WHERE oi.item_id IN (
+                            SELECT item_id
+                            FROM OutfitItems
+                            WHERE outfit_id = $1
+                        )
+                        GROUP BY oi.item_id
+                    ) sub
+                    WHERE ci.id = sub.item_id;
                     """,
-                    used_worn_at,
                     used_outfit_id,
                 )
 
@@ -96,12 +104,12 @@ async def get_logged_outfits_month_service(pool, user_id: str, month: str):
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             """
-            SELECT (owl.worn_at)::date AS date,
+            SELECT (owl.worn_at AT TIME ZONE 'Europe/Dublin')::date AS date,
                    COUNT(*)::int AS count
             FROM outfit_wear_log owl
             JOIN Outfits o ON o.id = owl.outfit_id
             WHERE o.user_id = $1::uuid
-              AND (owl.worn_at)::date BETWEEN $2 AND $3
+              AND (owl.worn_at AT TIME ZONE 'Europe/Dublin')::date BETWEEN $2 AND $3
             GROUP BY 1
             ORDER BY 1;
             """,
@@ -151,7 +159,7 @@ async def get_logged_outfits_day_service(pool, user_id: str, date_str: str):
             LEFT JOIN ClothingItems ci ON ci.id = oi.item_id
 
             WHERE o.user_id = $1::uuid
-              AND (owl.worn_at)::date = $2
+              AND (owl.worn_at AT TIME ZONE 'Europe/Dublin')::date = $2
 
             GROUP BY owl.id, owl.worn_at, o.id
             ORDER BY owl.worn_at DESC;

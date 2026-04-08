@@ -1,9 +1,7 @@
 import traceback
 import random as rnd
 from typing import Optional
-
 from fastapi import HTTPException
-
 from app.helpers.similarity_function import item_similarity, pick_top_k, dot
 from app.services.user_service import get_user_style_vec
 from app.helpers.vector_math import l2_normalize
@@ -62,6 +60,23 @@ async def get_items_for_suggestions_service(
 
         return [dict(r) for r in rows]
 
+#helper function for suggestions response shape
+def build_suggestions_response(weather, seasons, include_jacket, occasion_id, suggestions, message=None):
+    return {
+        "weather": {
+            "temp": float(weather["main"]["temp"]),
+            "icon": weather["weather"][0]["icon"],
+            "wind": float((weather.get("wind") or {}).get("speed", 0)),
+        },
+        "rules": {
+            "allowed_seasons": seasons,
+            "include_jacket": include_jacket,
+            "occasion_id": occasion_id,
+        },
+        "suggestions": suggestions,
+        "message": message,
+    }
+
 #Main recommendation engine
 async def get_outfit_suggestions_service(
     pool,
@@ -79,9 +94,17 @@ async def get_outfit_suggestions_service(
         # FIRST: Get clothes list (not in laundry+ season + optional occasion)
         clothes = await get_items_for_suggestions_service(pool, user_id, seasons, occasion_id)
 
+        if not clothes:
+            return build_suggestions_response(
+                weather,
+                seasons,
+                include_jacket,
+                occasion_id,
+                [],
+                "No outfit could be generated with the available wardrobe items."
+            )
         # SECOND :  Build slots
         slots = build_slots(clothes)
-        print("SLOT COUNTS (filtered):", {k: len(v) for k, v in slots.items()})
 
         # THIRD: This checks whether the filtered wardrobe is too strict and now missing basic pieces.
         need_shoes = len(slots.get("shoes", [])) == 0
@@ -128,9 +151,16 @@ async def get_outfit_suggestions_service(
             seen.add(sig)
             score = 0.0
             if style_vec:
-                oufit_vector = outfit_vec_from_outfit(outfit, len(style_vec))
-                if oufit_vector:
-                    score = dot(l2_normalize(style_vec), oufit_vector)
+
+                outfit_vector = outfit_vec_from_outfit(outfit, len(style_vec))
+
+                if outfit_vector:
+                    normalized_user_vec = l2_normalize(style_vec)
+                    score = dot(normalized_user_vec, outfit_vector)
+
+                    print("\n--- PERSONALIZATION SIMILARITY CHECK ---")
+                    print("Similarity score:", score)
+                    print("-----------------------------\n")
 
             #append the candidate with outfit itself and its score
             candidates.append({"outfit": outfit, "score": score})
@@ -141,63 +171,55 @@ async def get_outfit_suggestions_service(
         #sort outfits so best one comes first
         candidates.sort(key=lambda x: x["score"], reverse=True)
 
+        print("\n=== SORTED CANDIDATES ===")
+        for i, c in enumerate(candidates, start=1):
+            print(f"Rank {i}: {c['score']}")
+        print("=========================\n")
+
         N_TOTAL = 15 # choose 15 outfit
         N_TOP = 10 # top 10 good
         N_RANDOM_LOW = 5 # last 5 inn the sorted list
 
         top_band = candidates[:min(N_TOP, len(candidates))] #10 top strong match
-
-        low_pool = candidates[-10:] if len(candidates) > 10 else candidates[N_TOP:]# if there are more than 10 candidates, take the last 10 ranked candidates
+        low_pool = candidates[N_TOP:] # create low ranked pool
         low_band = rnd.sample(low_pool, k=min(N_RANDOM_LOW, len(low_pool))) if low_pool else [] # pick random 5 outfit from low ranked
-
         picked = top_band + low_band # combine them together
 
         #Since some outfit could theoretically appear in both top and low lists, this removes duplicates again.
-        seen2 = set()
-        final_scored = []
-        for c in picked:
-            sig = outfit_signature(c["outfit"])
-            if sig in seen2:
-                continue
-            seen2.add(sig)
-            final_scored.append(c)
+        #seen2 = set()
+        #final_scored = []
+        #for c in picked:
+        #    sig = outfit_signature(c["outfit"])
+        #    if sig in seen2:
+        #        continue
+        #    seen2.add(sig)
+        #    final_scored.append(c)
 
-    #If after deduplication if we still have fewer than 15, it fills from remaining sorted candidates
-        if len(final_scored) < N_TOTAL:
+        seen2 = {outfit_signature(c["outfit"]) for c in picked}
+
+        # If we still have fewer than 15, fill from remaining sorted candidates
+        if len(picked) < N_TOTAL:
             for c in candidates:
                 sig = outfit_signature(c["outfit"])
                 if sig in seen2:
                     continue
                 seen2.add(sig)
-                final_scored.append(c)
-                if len(final_scored) >= N_TOTAL:
+                picked.append(c)
+                if len(picked) >= N_TOTAL:
                     break
 
 
        #final result sent to frontend is only the outfit dictionaries, not the scores
-        final_scored = final_scored[:N_TOTAL]
+        final_scored = picked[:N_TOTAL]
         outfits = [c["outfit"] for c in final_scored]
-        scores = [float(c["score"]) for c in final_scored]
-        labels = [f"Top {i + 1}" if i < N_TOP else f"D{i - N_TOP + 1}" for i in range(len(final_scored))]
 
-        print("TOP SCORES:", [round(c["score"], 3) for c in final_scored[:N_TOP]])
-        print("RANDOM LOW SCORES:", [round(c["score"], 3) for c in final_scored[N_TOP:]])
-
-        return {
-            "weather": {
-                "temp": float(weather["main"]["temp"]),
-                "icon": weather["weather"][0]["icon"],
-                "wind": float((weather.get("wind") or {}).get("speed", 0)),
-            },
-            "rules": {
-                "allowed_seasons": seasons,
-                "include_jacket": include_jacket,
-                "occasion_id": occasion_id,
-            },
-            "suggestions": outfits,
-            "scores": scores,
-            "labels": labels
-        }
+        return build_suggestions_response(
+            weather,
+            seasons,
+            include_jacket,
+            occasion_id,
+            outfits
+        )
 
     except HTTPException:
         raise
@@ -213,8 +235,7 @@ async def make_one_outfit(slots: dict, include_jacket: bool, style_vec: list[flo
     jumpsuits = slots.get("jumpsuit", [])
     shoes_list = slots.get("shoes", [])
     outerwear_list = slots.get("outerwear", [])
-
-     #check if it possible to build one piece and two piece outfits
+    #check if it possible to build one piece and two piece outfits
     can_twopiece = bool(tops and bottoms and shoes_list)
     can_onepiece = bool(jumpsuits and shoes_list)
 
@@ -247,32 +268,8 @@ async def make_one_outfit(slots: dict, include_jacket: bool, style_vec: list[flo
             "shoes": pick_top_k(shoes_list, style_vec, k=6),
             "outerwear": None,
         }
-
     if include_jacket:
         outfit["outerwear"] = pick_top_k(outerwear_list, style_vec, k=4)
-
-    # Debug sims (optional)
-    #if style_vec:
-      #  chosen_outer = outfit.get("outerwear")
-       # if chosen_outer:
-       #     print("Chosen OUTER sim:", item_similarity(style_vec, chosen_outer))
-
-      #  chosen_top = outfit.get("top")
-      #  if chosen_top:
-     #       print("Chosen TOP sim:", item_similarity(style_vec, chosen_top))
-
-      #  chosen_bottom = outfit.get("bottom")
-       # if chosen_bottom:
-      #      print("Chosen BOTTOM sim:", item_similarity(style_vec, chosen_bottom))
-
-     #   chosen_shoes = outfit.get("shoes")
-      #  if chosen_shoes:
-      #      print("Chosen SHOES sim:", item_similarity(style_vec, chosen_shoes))
-
-       # chosen_jumpsuit = outfit.get("jumpsuit")
-        #if chosen_jumpsuit:
-       #     print("Chosen JUMPSUIT sim:", item_similarity(style_vec, chosen_jumpsuit))
-
     return outfit
 
 def outfit_signature(outfit: dict) -> tuple:

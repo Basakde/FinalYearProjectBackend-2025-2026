@@ -13,7 +13,7 @@ class PreferencePayload(BaseModel):
     user_id: str
     preference: str  # like/dislike
     outfit_id: Optional[str] = None
-    item_ids: Optional[List[str]] = None
+    item_ids: list[Optional[str]]
     master_occasion_id:Optional[str]=None
 
 @router.post("/")
@@ -28,7 +28,8 @@ async def set_preference(payload: PreferencePayload, request: Request,current_us
             if payload.outfit_id:
                 used_outfit_id = payload.outfit_id
             else:
-                if not payload.item_ids or len(payload.item_ids) < 2:
+                real_item_ids = [item_id for item_id in (payload.item_ids or []) if item_id]
+                if  len(real_item_ids) < 2:
                     raise HTTPException(400, "Need outfit_id or item_ids (min 2)")
                 used_outfit_id = await create_outfit_service(
                     conn,

@@ -1,6 +1,7 @@
 # app/services/user_service.py
 from fastapi import HTTPException
 
+from app.config.supabase_client import supabase
 from app.helpers.vector_math import l2_normalize
 
 
@@ -76,3 +77,17 @@ async def get_tryon_image_path_service(conn, user_id: str):
         return dict(row) if row else None
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+async def delete_my_account_service(pool, user_id: str) -> None:
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            await conn.execute(
+                "DELETE FROM users WHERE id = $1",
+                user_id,
+            )
+
+    try:
+        supabase.auth.admin.delete_user(user_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Auth delete failed: {str(e)}")

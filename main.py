@@ -10,12 +10,28 @@ from app.api.bg_api import router as bg_router
 from app.api.category_api import router as category_router
 from app.api.weather_api import router as weather_router
 from app.api.subcategory_api import router as subcategory_router
+from app.api.outfit_api import router as outfit_router
+from app.api.colors_api import router as colors_router
+from app.api.materials_api import router as materials_router
+from app.api.occasions_api import router as occasions_router
+from app.api.outfit_suggestions_api import router as suggestions_router
+from app.api.outfit_log_api import router as logged_outfits_router
+from app.api.outfit_preference_api import router as preference_router
+from app.api.favorites_api import router as favorites_router
+from app.api.virtual_try_on_api import router as tryon_router
+from app.api.consent_api import router as consent_router
+from fastapi.staticfiles import StaticFiles
+
+
+
+
 
 
 app = FastAPI()
-SUPABASE_URL=os.getenv("SUPABASE_URL")
-SUPABASE_SERVICE_KEY=os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-supabase=create_client(SUPABASE_URL,SUPABASE_SERVICE_KEY)
+import os
+
+os.makedirs("generated_tryons", exist_ok=True)
+app.mount("/generated_tryons", StaticFiles(directory="generated_tryons"), name="generated_tryons")
 
 
 app.add_middleware(
@@ -40,6 +56,17 @@ app.include_router(bg_router)
 app.include_router(category_router)
 app.include_router(weather_router)
 app.include_router(subcategory_router)
+app.include_router(outfit_router)
+app.include_router(colors_router)
+app.include_router(materials_router)
+app.include_router(occasions_router)
+app.include_router(suggestions_router)
+app.include_router(logged_outfits_router)
+app.include_router(preference_router)
+app.include_router(favorites_router)
+app.include_router(tryon_router)
+app.include_router(consent_router)
+
 
 @app.on_event("shutdown")
 async def shutdown():

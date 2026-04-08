@@ -6,7 +6,8 @@ from app.dependencies.auth import get_current_user
 from app.services.item_service import (
     get_item_by_id_service,
     get_items_by_user_service,
-    create_item_service, delete_item_service, update_item_service,
+    create_item_service, delete_item_service, update_item_service, get_unworn_items_service,
+    get_most_worn_items_service,
 
 )
 from app.models.item_modal import ClothingItemCreate
@@ -14,6 +15,30 @@ router = APIRouter(prefix="/items", tags=["Items"])
 
 
 # /items/{item_id}
+
+@router.get("/most-worn")
+async def get_most_worn_items(
+    request: Request,
+    limit: int = 10,
+    current_user=Depends(get_current_user),
+):
+    pool = request.app.state.db
+    user_id = str(current_user.id)
+
+    return await get_most_worn_items_service(pool, user_id, limit)
+
+@router.get("/unworn")
+async def get_unworn_items(
+    request: Request,
+    days: int = 14,
+    current_user=Depends(get_current_user),
+):
+    pool = request.app.state.db
+    user_id = str(current_user.id)
+
+    items = await get_unworn_items_service(pool, user_id, days)
+    return {"items": items}
+
 @router.get("/{item_id}")
 async def get_item_by_id(item_id: str, request: Request,current_user=Depends(get_current_user),):
     pool = request.app.state.db

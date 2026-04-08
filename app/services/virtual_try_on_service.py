@@ -32,6 +32,7 @@ async def quick_try_on_service(conn, payload) -> dict:
         raise HTTPException(status_code=404, detail="User not found")
 
     path = row.get("tryon_image_path")
+    is_default_avatar = False
 
     if not path:
         mannequin_url = os.getenv("DEFAULT_URL")
@@ -39,29 +40,59 @@ async def quick_try_on_service(conn, payload) -> dict:
             raise HTTPException(status_code=500, detail="DEFAULT_URL not configured")
 
         person_img = load_image_from_url(mannequin_url)
+        is_default_avatar = True
     else:
         signed_url = create_tryon_signed_url(path)
         person_img = load_image_from_url(signed_url)
 
-    contents = [
-        """
-        Edit the FIRST image only.
+    if is_default_avatar:
+        prompt = """
+           Edit the FIRST image only.
 
-        Task:
-        - Replace the clothing on the person in the first image with the garments shown in the reference clothing images.
-        - Preserve the exact same person identity, face, hair, skin tone, body shape, pose, camera angle, and framing from the first image.
-        - Do not change the person.
-        - Do not beautify, restyle, regenerate, or alter facial features.
-        - Do not change hairstyle.
-        - Do not change body proportions.
-        - Keep the person in the exact same position.
-        - Use the clothing reference images only to transfer the garments.
-        - Output a photorealistic try-on result.
-        - Plain light gray background for full image size.
-        - No border.
-        """,
-        person_img
-    ]
+           Task:
+           - Replace the clothing on the figure in the first image with the garments shown in the reference clothing images.
+           - Preserve the same pose, body position, camera angle, framing, and overall proportions from the first image.
+           - Do not remove human-body from images, there should be always a human in the generated image.
+           - Keep the figure consistent, but do not treat it as a fixed real identity.
+           - Use the clothing reference images only to transfer the garments.
+           - Do not change the clothes in the clothing images.
+           - Use exactly the same number of clothing items as provided in the reference images.
+           - Do not invent any missing garment.
+           - The lower body must remain uncovered except for the dress itself unless a separate bottom garment is explicitly included in the input images.
+           - Do not significantly change the body position or framing.
+           - Do not crop, shorten, fold, rotate, or distort the clothing items especially jeans. 
+           - Do not change the colors of clothing items.
+           - If the item is full-length pants, they must remain full-length pants and extend naturally to the feets. 
+           - Output a photorealistic try-on result.
+           - Put always plain light gray background for full image size.
+           - No border.
+           """
+    else:
+        prompt = """
+           Edit the FIRST image only.
+
+           Task:
+           - Replace the clothing on the person in the first image with the garments shown in the reference clothing images.
+           - Preserve the exact same person identity, face, hair, skin tone, body shape, pose, camera angle, and framing from the first image.
+           - Do not change the person.
+           - Do not change the clothes in the clothing images.
+           - Do not beautify, restyle, regenerate, or alter facial features.
+           - Do not change hairstyle.
+           - Do not change body proportions.
+           - Keep the person in the exact same position.
+           - Use the clothing reference images only to transfer the garments.
+           - Use exactly the same number of clothing items as provided in the reference images.
+           - Do not invent any missing garment.
+           - The lower body must remain uncovered except for the dress itself unless a separate bottom garment is explicitly included in the input images.
+           - Do not CROP, shorten, fold, rotate, or distort the clothing items especially jeans. 
+           - Do not change the colors of clothing items.
+           - If the item is full-length pants, they must remain full-length pants and extend naturally to the ankles. 
+           - Output a photorealistic try-on result.
+           - Put always plain light gray background for full image size.
+           - No border.
+           """
+
+    contents = [prompt, person_img]
 
     if payload.outerwear_url:
         contents.append(load_image_from_url(payload.outerwear_url))

@@ -18,3 +18,4 @@ OCCASIONS = [
 SEASONS = ["spring","summer","autumn","winter"]  # 4 fixed
 
 CATEGORIES = ["top","bottom","outerwear","shoes","accessory","jumpsuit"] #6
+

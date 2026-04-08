@@ -1,30 +1,31 @@
-# dependencies/auth.py
-from fastapi import Header, HTTPException, status
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.config.supabase_client import supabase
 
+security = HTTPBearer(auto_error=False)
 
-# adjust import path to your project
 
-def _extract_bearer_token(authorization: str | None) -> str:
-    if not authorization:
+def _extract_bearer_token(credentials: HTTPAuthorizationCredentials | None) -> str:
+    if not credentials:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing Authorization header",
         )
 
-    parts = authorization.split(" ", 1)
-    if len(parts) != 2 or parts[0].lower() != "bearer" or not parts[1].strip():
+    if credentials.scheme.lower() != "bearer" or not credentials.credentials.strip():
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid Authorization header",
         )
 
-    return parts[1].strip()
+    return credentials.credentials.strip()
 
 
-async def get_current_user(authorization: str | None = Header(default=None)):
-    token = _extract_bearer_token(authorization)
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+):
+    token = _extract_bearer_token(credentials)
 
     try:
         response = supabase.auth.get_user(token)

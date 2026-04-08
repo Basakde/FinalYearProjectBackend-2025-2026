@@ -7,7 +7,7 @@ class ClothingItemCreate(BaseModel):
     img_description: Optional[str] = ""
     image_url: Optional[str] = None
     processed_img_url: Optional[str] = None
-    category_id: Optional[int] = None
+    category_id: int
     subcategory_id: Optional[int] = None
     in_laundry: bool = False
     last_worn_at:Optional[str] = None

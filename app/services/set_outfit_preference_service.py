@@ -28,11 +28,11 @@ async def update_user_style_ema(conn, user_id: str, outfit_vec: list[float], alp
 
     style_vec = list(row["style_vec"]) if row["style_vec"] is not None else [0.0] * len(outfit_vec)
 
-    # safety: reset if mismatch
+    # reseting if mismatch
     if len(style_vec) != len(outfit_vec):
         style_vec = [0.0] * len(outfit_vec)
 
-    new_style = ema_update(style_vec, outfit_vec, alpha=alpha, sign=sign)
+    new_style = ema_update(style_vec, outfit_vec, learning_rate=alpha, feedback_direction=sign)
 
     await conn.execute(
         "UPDATE Users SET style_vec = $2 WHERE id = $1::uuid",
@@ -82,7 +82,7 @@ async def set_outfit_preference_service(conn, user_id: str, outfit_id: str, pref
         preference
     )
 
-    # Optional: only count when first time ever
+    # only count when first time ever
     if prev_pref is None:
         await conn.execute(
             """

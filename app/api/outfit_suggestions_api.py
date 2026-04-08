@@ -12,7 +12,7 @@ class SuggestionRequest(BaseModel):
     user_id: str
     lat: float
     lon: float
-    occasion_id: Optional[str] = None
+    master_occasion_id: Optional[str] = None
 
 @router.post("/get_outfit_suggestions")
 async def get_outfit_suggestions(payload: SuggestionRequest, request: Request,  current_user=Depends(get_current_user)):
@@ -25,7 +25,7 @@ async def get_outfit_suggestions(payload: SuggestionRequest, request: Request,  
             lat=payload.lat,
             lon=payload.lon,
             user_id=payload.user_id,
-            occasion_id = payload.occasion_id
+            occasion_id = payload.master_occasion_id
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

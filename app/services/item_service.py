@@ -111,17 +111,17 @@ async def create_item_service(pool, item: ClothingItemCreate):
 
             #user generated colors
             await upsert_tags(
-                con, "Colors", "ItemColors", "color_id",
+                con, "Colors", "ItemColors", "color_id", "mapped_color_id",  "colors_master",
                 item_id, item.user_id, item.colors
             )
             # user generated materials
             await upsert_tags(
-                con, "Materials", "ItemMaterials", "material_id",
+                con, "Materials", "ItemMaterials", "material_id", "mapped_material_id","materials_master",
                 item_id, item.user_id, item.materials
             )
             # user generated  occasions
             await upsert_tags(
-                con, "Occasions", "ItemOccasions", "occasion_id",
+                con, "Occasions", "ItemOccasions", "occasion_id",   "mapped_occasion_id","occasions_master",
                 item_id, item.user_id, item.occasions
             )
             for season in item.seasons:
@@ -262,19 +262,19 @@ async def update_item_service(pool, item_id: str, data: dict):
 
                 # then insert new ones (if list not empty)
                 await upsert_tags(
-                    conn, "Colors", "ItemColors", "color_id",
+                    conn, "Colors", "ItemColors", "color_id", "mapped_color_id", "colors_master",
                     item_id, user_id, data["colors"]
                 )
 
             # Materials
             if "materials" in data and data["materials"] is not None:
                 await conn.execute("DELETE FROM ItemMaterials WHERE item_id = $1", item_id)
-                await upsert_tags(conn, "Materials", "ItemMaterials", "material_id",
+                await upsert_tags(conn, "Materials", "ItemMaterials", "material_id", "mapped_material_id", "materials_master",
                                   item_id, user_id, data["materials"])
 
             if "occasions" in data and data["occasions"] is not None:
                 await conn.execute("DELETE FROM ItemOccasions WHERE item_id = $1", item_id)
-                await upsert_tags(conn, "Occasions", "ItemOccasions", "occasion_id",
+                await upsert_tags(conn, "Occasions", "ItemOccasions", "occasion_id", "mapped_occasion_id","occasions_master",
                                   item_id, user_id, data["occasions"])
 
             # Seasons

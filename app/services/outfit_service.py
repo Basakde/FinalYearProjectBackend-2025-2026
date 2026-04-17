@@ -1,8 +1,7 @@
-from typing import List, Optional
+from typing import Optional
 from fastapi import HTTPException
-import math
 
-from app.helpers.favorite_items_helper import apply_favorite_to_user_style
+from app.services.favorite_items_helper import apply_favorite_to_user_style
 from app.helpers.vector_math import l2_normalize
 
 

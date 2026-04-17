@@ -2,10 +2,10 @@ import traceback
 import random as rnd
 from typing import Optional
 from fastapi import HTTPException
-from app.helpers.similarity_function import item_similarity, pick_top_k, dot
+from app.helpers.similarity_function import pick_top_k, dot
 from app.services.user_service import get_user_style_vec
 from app.helpers.vector_math import l2_normalize
-from app.models.rules import seasons_from_temp, needs_jacket, build_slots
+from app.helpers.rules import seasons_from_temp, needs_jacket, build_slots
 from app.services.weather_service import get_weather_service
 
 

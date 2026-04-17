@@ -158,9 +158,6 @@ async def get_outfit_suggestions_service(
                     normalized_user_vec = l2_normalize(style_vec)
                     score = dot(normalized_user_vec, outfit_vector)
 
-                    print("\n--- PERSONALIZATION SIMILARITY CHECK ---")
-                    print("Similarity score:", score)
-                    print("-----------------------------\n")
 
             #append the candidate with outfit itself and its score
             candidates.append({"outfit": outfit, "score": score})
@@ -171,30 +168,17 @@ async def get_outfit_suggestions_service(
         #sort outfits so best one comes first
         candidates.sort(key=lambda x: x["score"], reverse=True)
 
-        print("\n=== SORTED CANDIDATES ===")
-        for i, c in enumerate(candidates, start=1):
-            print(f"Rank {i}: {c['score']}")
-        print("=========================\n")
-
         N_TOTAL = 15 # choose 15 outfit
         N_TOP = 10 # top 10 good
-        N_RANDOM_LOW = 5 # last 5 inn the sorted list
+        N_RANDOM_LOW = 5 # number of extra outfits to randomly take from the lower-ranked pool
 
         top_band = candidates[:min(N_TOP, len(candidates))] #10 top strong match
         low_pool = candidates[N_TOP:] # create low ranked pool
         low_band = rnd.sample(low_pool, k=min(N_RANDOM_LOW, len(low_pool))) if low_pool else [] # pick random 5 outfit from low ranked
         picked = top_band + low_band # combine them together
 
-        #Since some outfit could theoretically appear in both top and low lists, this removes duplicates again.
-        #seen2 = set()
-        #final_scored = []
-        #for c in picked:
-        #    sig = outfit_signature(c["outfit"])
-        #    if sig in seen2:
-        #        continue
-        #    seen2.add(sig)
-        #    final_scored.append(c)
-
+        # collect signatures of already selected outfits
+        # used to avoid duplicates when filling remaining slots
         seen2 = {outfit_signature(c["outfit"]) for c in picked}
 
         # If we still have fewer than 15, fill from remaining sorted candidates
@@ -269,7 +253,7 @@ async def make_one_outfit(slots: dict, include_jacket: bool, style_vec: list[flo
             "outerwear": None,
         }
     if include_jacket:
-        outfit["outerwear"] = pick_top_k(outerwear_list, style_vec, k=4)
+        outfit["outerwear"] = pick_top_k(outerwear_list, style_vec, k=6)
     return outfit
 
 def outfit_signature(outfit: dict) -> tuple:

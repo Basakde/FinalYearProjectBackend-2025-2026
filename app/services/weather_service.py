@@ -5,7 +5,7 @@ from fastapi import HTTPException
 OPENWEATHER_KEY = os.getenv("OPENWEATHER_API_KEY")
 
 async def get_weather_service(lat: float, lon: float):
-    """Fetch temperature + icon from OpenWeather API."""
+    """Fetch current weather data from the OpenWeather API."""
 
     if not OPENWEATHER_KEY:
         raise HTTPException(status_code=500, detail="Weather API key missing")

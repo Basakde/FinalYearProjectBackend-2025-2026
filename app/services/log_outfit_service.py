@@ -36,17 +36,15 @@ async def log_outfit_service(
                     conn, user_id, item_ids, master_occasion_id, name
                 )
 
+            # AFTER
             if worn_at:
                 try:
-                    selected_date = date.fromisoformat(worn_at)
-                    used_worn_at = datetime.combine(
-                        selected_date,
-                        time(12, 0),
-                        tzinfo=DUBLIN_TZ
-
-                    )
+                    # Try full datetime first, then fallback to date-only
+                    used_worn_at = datetime.fromisoformat(worn_at)
+                    if used_worn_at.tzinfo is None:
+                        used_worn_at = used_worn_at.replace(tzinfo=DUBLIN_TZ)
                 except Exception:
-                    raise HTTPException(400, "Invalid worn_at format, expected YYYY-MM-DD")
+                    raise HTTPException(400, "Invalid worn_at format, expected ISO datetime")
             else:
                 used_worn_at = datetime.now(DUBLIN_TZ)
 

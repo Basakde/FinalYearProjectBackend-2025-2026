@@ -1,7 +1,7 @@
 # Helper: UPSERT TAGS (colors, materials, seasons, occasions)
 from typing import Optional
 
-from app.models.vector_helpers import normalize_label
+from app.helpers.vector_helpers import normalize_label
 
 
 async def upsert_tags(conn, table_name, pivot_table, pivot_field, mapped_field ,master_table, item_id, user_id, tags):

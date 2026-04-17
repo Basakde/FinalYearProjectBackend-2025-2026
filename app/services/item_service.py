@@ -1,9 +1,7 @@
-from datetime import datetime
-
 from fastapi import HTTPException
 
 from app.models.category_mapping import CATEGORY_ID_TO_NAME, SEASON_MAP
-from app.models.vector_helpers import build_item_feature_vector
+from app.helpers.vector_helpers import build_item_feature_vector
 from app.utils.upsert_tags import upsert_tags
 from app.models.item_modal import ClothingItemCreate
 from datetime import datetime, timedelta, timezone
@@ -14,9 +12,20 @@ from datetime import datetime, timedelta, timezone
 async def get_item_by_id_service(pool, item_id: str):
     try:
         async with pool.acquire() as connection:
-            # Base item
+            # Base item- last_worn_at calculated on the fly, ignoring future logs
             row = await connection.fetchrow(
-                "SELECT * FROM ClothingItems WHERE id = $1;",
+                """
+                SELECT ci.*,
+                       (
+                           SELECT MAX(owl.worn_at)
+                           FROM outfit_wear_log owl
+                           JOIN OutfitItems oi ON oi.outfit_id = owl.outfit_id
+                           WHERE oi.item_id = ci.id
+                             AND owl.worn_at <= NOW()
+                       ) AS last_worn_at
+                FROM ClothingItems ci
+                WHERE ci.id = $1;
+                """,
                 item_id
             )
 
@@ -67,8 +76,21 @@ async def get_item_by_id_service(pool, item_id: str):
 async def get_items_by_user_service(pool, user_id: str):
     try:
         async with pool.acquire() as connection:
+            # last_worn_at calculated on the fly, ignoring future logs
             rows = await connection.fetch(
-                "SELECT * FROM ClothingItems WHERE user_id = $1 ORDER BY created_at DESC",
+                """
+                SELECT ci.*,
+                       (
+                           SELECT MAX(owl.worn_at)
+                           FROM outfit_wear_log owl
+                           JOIN OutfitItems oi ON oi.outfit_id = owl.outfit_id
+                           WHERE oi.item_id = ci.id
+                             AND owl.worn_at <= NOW()
+                       ) AS last_worn_at
+                FROM ClothingItems ci
+                WHERE ci.user_id = $1
+                ORDER BY ci.created_at DESC;
+                """,
                 user_id
             )
             return [dict(row) for row in rows]
@@ -350,6 +372,7 @@ async def get_unworn_items_service(pool, user_id: str, days: int = 14):
                 ON oi.item_id = ci.id
             LEFT JOIN outfit_wear_log owl
                 ON owl.outfit_id = oi.outfit_id
+               AND owl.worn_at <= NOW()
             WHERE ci.user_id = $1
             GROUP BY ci.id, ci.image_url, ci.processed_img_url, ci.img_description
             HAVING MAX(owl.worn_at) IS NULL
@@ -378,12 +401,13 @@ async def get_most_worn_items_service(pool, user_id: str, limit: int = 10):
                     ON oi.item_id = ci.id
                 JOIN outfit_wear_log owl
                     ON owl.outfit_id = oi.outfit_id
+                   AND owl.worn_at <= NOW()
                 WHERE ci.user_id = $1
                 GROUP BY
                     ci.id,
                     ci.image_url,
                     ci.img_description
-                 ORDER BY wear_count DESC, last_worn_at DESC
+                ORDER BY wear_count DESC, last_worn_at DESC
                 LIMIT $2;
                 """,
                 user_id,

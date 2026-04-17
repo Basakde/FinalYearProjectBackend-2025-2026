@@ -1,5 +1,5 @@
 
-from app.models.vector_helpers import  build_item_feature_vector
+from app.helpers.vector_helpers import  build_item_feature_vector
 from app.models.vector_ import CATEGORIES, COLORS, MATERIALS, OCCASIONS, SEASONS
 
 

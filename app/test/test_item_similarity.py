@@ -1,6 +1,6 @@
 from app.helpers.similarity_function import item_similarity
 from app.helpers.vector_math import l2_normalize
-from app.models.vector_helpers import  build_item_feature_vector
+from app.helpers.vector_helpers import  build_item_feature_vector
 
 
 def test_item_similarity():

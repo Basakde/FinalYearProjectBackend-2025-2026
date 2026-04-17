@@ -9,7 +9,7 @@ os.environ["SUPABASE_SERVICE_ROLE_KEY"] = "fake-service-role-key"
 
 from app.services.outfit_suggestions_service import outfit_vec_from_outfit, outfit_score
 from app.helpers.vector_math import l2_normalize
-from app.models.vector_helpers import  build_item_feature_vector
+from app.helpers.vector_helpers import  build_item_feature_vector
 
 
 def test_outfit_similarity_ranking():

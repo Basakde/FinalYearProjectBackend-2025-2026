@@ -8,7 +8,7 @@ FinalYearProjectBackend-2025/2026
 
 This is the backend service for the Smart Wardrobe Assistant, built using FastAPI and Python.  
 It provides API endpoints for user management, wardrobe items, background removal (U²-Net), image features retrieval, and weather-based outfit suggestions.  
-The backend also connects to Supabase (PostgreSQL) for data storage, and table management.
+The backend also connects to Supabase (PostgreSQL) for data storage,authentication and table management.
 
 
 # Project Structure
@@ -20,6 +20,8 @@ backend/
 │ ├── services/ # Business logic and SQL queries
 │ ├── models/ # Pydantic models and schemas
 │ ├── utils/ # Utility functions
+│ ├── helpers/ # Helper functions
+│ ├── test/ # Unit tests
 │ └── db/ # Database connection logic
 │
 ├── main.py # Entry point – starts FastAPI app
@@ -46,7 +48,10 @@ SUPABASE_URL
 SUPABASE_SERVICE_ROLE_KEY
 DATABASE_URL
 OPENWEATHER_API_KEY
-NEWS_API_KEY
+VERTEX_API_KEY
+GOOGLE_CLOUD_PROJECT
+GOOGLE_CLOUD_LOCATION
+DEFAULT_URL
 
 # API Documentation
 
